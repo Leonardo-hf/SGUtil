@@ -7,7 +7,7 @@ public interface SGUtil {
 
     void decodeWithImage(String path);
 
-    void decodeWithText(String path);
+    String decodeWithText(String path);
 
     void encodeWithImage(String path, String hideImgPath);
 
@@ -50,8 +50,12 @@ public interface SGUtil {
     }
 
     static void main(String[] args) {
-        //args = new String[]{"-c", "src/main/resources/8qUVfl71.png", "-o", "decode"};
-        args = new String[]{"--help"};
+        //args = new String[]{"-c", "src/main/resources/1.jpg", "-o", "encode", "-i", "-p", "src/main/resources/21.png", "-m", "Simple"};
+        //args = new String[]{"-c", "src/main/resources/5xRLKLPi.jpeg", "-o", "decode", "-i", "-m", "Simple"};
+        //args = new String[]{"-c", "src/main/resources/1.jpg", "-o", "encode", "-i","-p", "src/main/resources/21.png"};
+        //args = new String[]{"-c", "src/main/resources/C7fCpQmk.png", "-o", "decode", "-i"};
+        //args = new String[]{"--help"};
+        //args = new String[]{"-c", "src/main/resources/1.jpg", "-t","123456"};
         try {
             SGArgs sgArgs = new SGArgs();
             JCommander cmd = JCommander.newBuilder().addObject(sgArgs).build();
@@ -70,12 +74,12 @@ public interface SGUtil {
                 throw new SteganographyException("不存在的隐写模式");
             }
             if (sgArgs.getOption().equals("encode")) {
-                if (!sgArgs.isImage() && sgArgs.getPath() != null) {
-                    sgUtil.encodeWithTextFromFile(sgArgs.getPath(), sgArgs.getPath());
+                if (!sgArgs.isImage() && sgArgs.getHidePath() != null) {
+                    sgUtil.encodeWithTextFromFile(sgArgs.getPath(), sgArgs.getHidePath());
                 } else if (!sgArgs.isImage() && sgArgs.getHideText() != null) {
                     sgUtil.encodeWithText(sgArgs.getPath(), sgArgs.getHideText());
-                } else if (sgArgs.isImage() && sgArgs.getPath() != null) {
-                    sgUtil.encodeWithImage(sgArgs.getPath(), sgArgs.getPath());
+                } else if (sgArgs.isImage() && sgArgs.getHidePath() != null) {
+                    sgUtil.encodeWithImage(sgArgs.getPath(), sgArgs.getHidePath());
                 } else {
                     throw new SteganographyException("至少需要一个隐写的内容");
                 }

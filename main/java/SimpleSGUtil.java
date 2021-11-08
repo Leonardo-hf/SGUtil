@@ -2,71 +2,21 @@ import javax.imageio.ImageIO;
 import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.*;
-import java.util.Random;
 
 public class SimpleSGUtil implements SGUtil {
 
-    @Override
-    public void decodeWithText(String filePath) {
-        byte[] origin = getImageBinary(filePath);
-        byte sectionSymbol = (byte) 0xff;
-        byte sectionType = (byte) 0xd9;
-        boolean sectionFlag = false;
-        int startIndex = 0;
-        for (int i = 0; i < origin.length; i++) {
-            if (sectionFlag) {
-                if (origin[i] != sectionType) {
-                    sectionFlag = false;
-                    continue;
-                }
-                startIndex = i + 1;
-                break;
-            }
-            if (origin[i] == sectionSymbol) {
-                sectionFlag = true;
-            }
-        }
-        byte[] newFileBytes = new byte[origin.length - startIndex];
-        System.arraycopy(origin, startIndex, newFileBytes, 0, origin.length - startIndex);
-        for (byte b : newFileBytes) {
-            System.out.print((char) b);
-        }
-    }
-
-    @Override
-    public void encodeWithText(String filePath, String text) {
-        try {
-            String saveFilePath = filePath.substring(0, filePath.lastIndexOf("/") + 1) + getRandomName(8) + ".png";
-            FileOutputStream fos = new FileOutputStream(saveFilePath);
-            BufferedImage bufferedImage = ImageIO.read(new File(filePath));
-            //转成jpeg
-            BufferedImage bufferedImageJPEG = new BufferedImage(bufferedImage.getWidth(),
-                    bufferedImage.getHeight(),
-                    BufferedImage.TYPE_INT_RGB);
-            bufferedImageJPEG.createGraphics().drawImage(bufferedImage, 0, 0, Color.white, null);
-            ImageIO.write(bufferedImageJPEG, "jpg", fos);
-            fos.flush();
-            //System.err.println(getImageBinary(saveFilePath));
-            writeImageBinary(saveFilePath, text.getBytes(), true);
-            System.out.println("隐写的图片被生成到：" + saveFilePath);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private static byte[] getImageBinary(String url) {
+    private byte[] getImageBinary(String url) throws SteganographyException {
         try {
             DataInputStream in = new DataInputStream(
                     new BufferedInputStream(
                             new FileInputStream(url)));
             return in.readAllBytes();
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new SteganographyException("隐写的图片不存在");
         }
-        return null;
     }
 
-    private static void writeImageBinary(String url, byte[] bytes, boolean behind) {
+    private void writeImageBinary(String url, byte[] bytes, boolean behind) throws SteganographyException {
         try {
             DataOutputStream out = new DataOutputStream(
                     new BufferedOutputStream(
@@ -74,12 +24,11 @@ public class SimpleSGUtil implements SGUtil {
             out.write(bytes);
             out.flush();
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new SteganographyException("追加写入出错");
         }
     }
 
-    @Override
-    public void encodeWithImage(String filePath, String hideFilePath) {
+    private void encodeWithBytesArray(String filePath, byte[] array) throws SteganographyException {
         try {
             String saveFilePath = filePath.substring(0, filePath.lastIndexOf("/") + 1) + getRandomName(8) + ".jpeg";
             FileOutputStream fos = new FileOutputStream(saveFilePath);
@@ -91,18 +40,15 @@ public class SimpleSGUtil implements SGUtil {
             bufferedImageJPEG.createGraphics().drawImage(bufferedImage, 0, 0, Color.white, null);
             ImageIO.write(bufferedImageJPEG, "jpg", fos);
             fos.flush();
-            //System.err.println(getImageBinary(saveFilePath));
-            writeImageBinary(saveFilePath, getImageBinary(hideFilePath), true);
+            writeImageBinary(saveFilePath, array, true);
             System.out.println("隐写的图片被生成到：" + saveFilePath);
         } catch (IOException e) {
-            e.printStackTrace();
+            throw new SteganographyException("载体图片不存在");
         }
     }
 
-    @Override
-    public void decodeWithImage(String filePath) {
+    private byte[] decodeWithBytesArray(String filePath) throws SteganographyException {
         byte[] origin = getImageBinary(filePath);
-        assert origin != null;
         byte sectionSymbol = (byte) 0xff;
         byte sectionType = (byte) 0xd9;
         boolean sectionFlag = false;
@@ -122,14 +68,52 @@ public class SimpleSGUtil implements SGUtil {
         }
         byte[] newFileBytes = new byte[origin.length - startIndex];
         System.arraycopy(origin, startIndex, newFileBytes, 0, origin.length - startIndex);
-        writeImageBinary(filePath.substring(0, filePath.lastIndexOf("/") + 1) + getRandomName(8) + ".jpeg", newFileBytes, false);
+        return newFileBytes;
     }
 
-    public static void main(String[] args) {
-        SGUtil sgUtil = new SimpleSGUtil();
-        //sgUtil.encodeWithText("src/main/resources/1.jpg", "234ewq");
-        //sgUtil.decodeWithText("src/main/resources/YFKVcrJY.png");
-        //sgUtil.encodeWithImage("src/main/resources/1.jpg", "21.png");
-        sgUtil.decodeWithImage("src/main/resources/mEnygWKq.jpeg");
+    @Override
+    public void encodeWithText(String filePath, String text) {
+        try {
+            encodeWithBytesArray(filePath, text.getBytes());
+        } catch (SteganographyException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public String decodeWithText(String filePath) {
+        try {
+            byte[] newFileBytes = decodeWithBytesArray(filePath);
+            StringBuilder s = new StringBuilder();
+            for (byte b : newFileBytes) {
+                s.append((char) b);
+            }
+            System.out.println(s);
+            return s.toString();
+        } catch (SteganographyException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    @Override
+    public void encodeWithImage(String filePath, String hideFilePath) {
+        try {
+            encodeWithBytesArray(filePath, getImageBinary(hideFilePath));
+        } catch (SteganographyException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void decodeWithImage(String filePath) {
+        try {
+            byte[] newFileBytes = decodeWithBytesArray(filePath);
+            String url = filePath.substring(0, filePath.lastIndexOf("/") + 1) + getRandomName(8) + ".jpeg";
+            writeImageBinary(url, newFileBytes, false);
+            System.out.println("解密的图片被生成到：" + url);
+        } catch (SteganographyException e) {
+            e.printStackTrace();
+        }
     }
 }

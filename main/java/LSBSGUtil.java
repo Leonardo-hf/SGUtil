@@ -12,50 +12,47 @@ import java.util.*;
 
 public class LSBSGUtil implements SGUtil {
 
-    static Set<String> lossyFormat = new HashSet<>(List.of("jpg", "jpeg"));
-    String imgName, imgExt, originExt;
-    String imgPath;
-    int defaultNameLength = 8;
-    String textkey = "NJU_Text";
-    String imgkey = "SE_Image";
-    int DESLength = 64, EXTLength = 0;
-    //int[][][] pixels;
-    int[] pixels;
-    ColorModel imgColorType;
-    int width, height, bands;
-    int ctPoint = 0;
-    int ctMaskOne, ctMaskZero;
-    Queue<Integer> maskOne = new ArrayDeque<>(List.of(1, 2, 4, 8, 16, 32, 64, 128));
-    Queue<Integer> maskZero = new ArrayDeque<>(List.of(254, 253, 251, 247, 239, 223, 191, 127));
+    private final Set<String> lossyFormat = new HashSet<>(List.of("jpg", "jpeg"));
+    private String imgName, imgExt, originExt;
+    private String imgPath;
+    private int defaultNameLength = 8;
+    private String key = "NJU_Text";
+    private int DESLength = 64, EXTLength = 0;
+    private int[] pixels;
+    private ColorModel imgColorType;
+    private int width, height, bands;
+    private int ctPoint = 0;
+    private int ctMaskOne, ctMaskZero;
+    private Queue<Integer> maskOne = new ArrayDeque<>(List.of(1, 2, 4, 8, 16, 32, 64, 128));
+    private Queue<Integer> maskZero = new ArrayDeque<>(List.of(254, 253, 251, 247, 239, 223, 191, 127));
 
-    private void init(String path) throws SteganographyException {
-        try {
-            File f = new File(path);
-            if (!f.exists()) {
-                throw new SteganographyException("隐写对象不存在");
-            }
-            this.imgName = getRandomName(defaultNameLength);
-            this.imgPath = f.getPath().substring(0, f.getPath().lastIndexOf("/") + 1);
-            this.originExt = f.getName().split("\\.")[1];
-            //如果图片为有损压缩格式，将之保存为无损压缩的png格式输出
-            if (lossyFormat.contains(this.originExt))
-                this.imgExt = "png";
-            else
-                this.imgExt = originExt;
-            this.ctMaskOne = maskOne.poll();
-            this.ctMaskZero = maskZero.poll();
-            BufferedImage img = ImageIO.read(f);
-            this.imgColorType = img.getColorModel();
-            Raster raster = img.getData();
-            //获得图片的长，宽，段数，并且将每个像素的RGB等值填入pixels
-            this.width = raster.getWidth();
-            this.height = raster.getHeight();
-            this.bands = raster.getNumBands();
-            this.pixels = new int[this.width * this.height * this.bands];
-            raster.getPixels(0, 0, this.width, this.height, this.pixels);
-        } catch (IOException e) {
-            e.printStackTrace();
+    private void init(String path) throws SteganographyException, IOException {
+        File f = new File(path);
+        if (!f.exists()) {
+            throw new SteganographyException("隐写对象不存在");
         }
+        this.imgName = getRandomName(this.defaultNameLength);
+        this.imgPath = f.getPath().substring(0, f.getPath().lastIndexOf("/") + 1);
+        this.originExt = f.getName().split("\\.")[1];
+        //如果图片为有损压缩格式，将之保存为无损压缩的png格式输出
+        if (this.lossyFormat.contains(this.originExt))
+            this.imgExt = "png";
+        else
+            this.imgExt = this.originExt;
+        this.maskOne = new ArrayDeque<>(List.of(1, 2, 4, 8, 16, 32, 64, 128));
+        this.maskZero = new ArrayDeque<>(List.of(254, 253, 251, 247, 239, 223, 191, 127));
+        this.ctMaskOne = this.maskOne.poll();
+        this.ctMaskZero = this.maskZero.poll();
+        BufferedImage img = ImageIO.read(f);
+        this.imgColorType = img.getColorModel();
+        Raster raster = img.getData();
+        //获得图片的长，宽，段数，并且将每个像素的RGB等值填入pixels
+        this.width = raster.getWidth();
+        this.height = raster.getHeight();
+        this.bands = raster.getNumBands();
+        this.pixels = new int[this.width * this.height * this.bands];
+        this.ctPoint = 0;
+        raster.getPixels(0, 0, this.width, this.height, this.pixels);
     }
 
     private String string2Binary(String text) {
@@ -74,14 +71,6 @@ public class LSBSGUtil implements SGUtil {
         return s.toString();
     }
 
-    /*private String char2Binary(char c) {
-        StringBuilder s = new StringBuilder(Integer.toBinaryString(Byte.toUnsignedInt((byte) c)));
-        while (s.length() < 8) {
-            s.insert(0, "0");
-        }
-        return s.toString();
-    }*/
-
     private void nextSlot() throws SteganographyException {
         if (this.ctPoint == this.width * this.height * this.bands - 1) {
             this.ctPoint = 0;
@@ -99,9 +88,9 @@ public class LSBSGUtil implements SGUtil {
     private void writeIn(String content) throws SteganographyException {
         for (char c : content.toCharArray()) {
             if (c - 48 == 0) {
-                pixels[ctPoint] &= this.ctMaskZero;
+                pixels[ctPoint] &= ctMaskZero;
             } else if (c - 48 == 1) {
-                pixels[ctPoint] |= this.ctMaskOne;
+                pixels[ctPoint] |= ctMaskOne;
             } else {
                 throw new SteganographyException("字符串未转换为二进制");
             }
@@ -109,12 +98,12 @@ public class LSBSGUtil implements SGUtil {
         }
     }
 
-    private void writeInFlag(String flag, String key) throws SteganographyException {
+    private void writeInFlag(String flag) throws SteganographyException {
         try {
-            if (key.getBytes().length != 8) {
-                throw new SteganographyException("key的字节长度不为8的倍数");
+            if (this.DESLength / this.key.getBytes().length != 8 || this.DESLength % this.key.getBytes().length != 0) {
+                throw new SteganographyException("秘钥的字节长度与加密长度不匹配");
             }
-            SecretKeySpec sKey = new SecretKeySpec(key.getBytes(), "DES");
+            SecretKeySpec sKey = new SecretKeySpec(this.key.getBytes(), "DES");
             Cipher cipher = Cipher.getInstance("DES/ECB/NoPadding");
             cipher.init(Cipher.ENCRYPT_MODE, sKey);
             byte[] secretFlag = cipher.doFinal(flag.getBytes());
@@ -124,7 +113,7 @@ public class LSBSGUtil implements SGUtil {
             }
             writeIn(s.toString());
         } catch (NoSuchPaddingException | IllegalBlockSizeException | NoSuchAlgorithmException | BadPaddingException | InvalidKeyException e) {
-            throw new SteganographyException("未知错误：" + e.getLocalizedMessage());
+            throw new SteganographyException("加密出错（程序BUG）:" + e.getLocalizedMessage());
         }
     }
 
@@ -143,26 +132,29 @@ public class LSBSGUtil implements SGUtil {
             StringBuilder length = new StringBuilder(String.valueOf(text.length()));
             while (length.length() < 8)
                 length.insert(0, '0');
-            writeInFlag(length.toString(), this.textkey);
+            writeInFlag(length.toString());
             //在图片中继续写入需要隐写的数据
             String binaryText = string2Binary(text);
             writeIn(binaryText);
             //生成新的图片
             make();
-        } catch (SteganographyException e) {
+        } catch (SteganographyException | IOException e) {
             e.printStackTrace();
         }
     }
 
     @Override
-    public void decodeWithText(String path) {
+    public String decodeWithText(String path) {
         try {
             init(path);
-            int length = verify(this.textkey);
-            System.out.println(readOut(length));
-        } catch (SteganographyException e) {
+            int length = verify();
+            String content = readOut(length);
+            System.out.println(content);
+            return content;
+        } catch (SteganographyException | IOException e) {
             e.printStackTrace();
         }
+        return null;
     }
 
     @Override
@@ -173,12 +165,16 @@ public class LSBSGUtil implements SGUtil {
             while (hideExt.length() < 8) {
                 hideExt.insert(0, "!");
             }
-            DataInputStream d = new DataInputStream(
-                    new BufferedInputStream(
-                            new FileInputStream(file)));
             StringBuilder s = new StringBuilder();
-            for (byte b : d.readAllBytes()) {
-                s.append(byte2Binary(b));
+            try {
+                DataInputStream d = new DataInputStream(
+                        new BufferedInputStream(
+                                new FileInputStream(file)));
+                for (byte b : d.readAllBytes()) {
+                    s.append(byte2Binary(b));
+                }
+            } catch (IOException e) {
+                throw new SteganographyException("隐写的图片不存在");
             }
             this.EXTLength = 64;
             init(path);
@@ -193,14 +189,14 @@ public class LSBSGUtil implements SGUtil {
             StringBuilder length = new StringBuilder(String.valueOf(s.length() / 8));
             while (length.length() < 8)
                 length.insert(0, '0');
-            writeInFlag(length.toString(), this.textkey);
+            writeInFlag(length.toString());
             //在图片中继续写入需要隐写的数据
             writeIn(s.toString());
             //写入后缀名
             writeIn(string2Binary(hideExt.toString()));
             //生成新的图片
             make();
-        } catch (IOException | SteganographyException ex) {
+        } catch (SteganographyException | IOException ex) {
             ex.printStackTrace();
         }
     }
@@ -209,7 +205,7 @@ public class LSBSGUtil implements SGUtil {
     public void decodeWithImage(String path) {
         try {
             init(path);
-            int length = verify(this.textkey);
+            int length = verify();
             String content = readOut(length);
             byte[] bytes = new byte[length];
             int index = 0;
@@ -226,7 +222,7 @@ public class LSBSGUtil implements SGUtil {
             }
             OutputStream os = new FileOutputStream(f);
             os.write(bytes);
-            System.out.println("隐写的图片被生成到：" + this.imgPath + this.imgName + "." + ext);
+            System.out.println("解密的图片被生成到：" + this.imgPath + this.imgName + "." + ext);
         } catch (SteganographyException | IOException e) {
             e.printStackTrace();
         }
@@ -251,11 +247,13 @@ public class LSBSGUtil implements SGUtil {
     }
 
 
-    private int verify(String key) throws SteganographyException {
+    private int verify() throws SteganographyException {
         try {
             //后缀名检验
             if (lossyFormat.contains(this.originExt))
-                throw new SteganographyException("不支持的文件格式");
+                throw new SteganographyException("不支持的文件格式(jpg,jpeg)");
+            if (this.DESLength / this.key.getBytes().length != 8 || this.DESLength % this.key.getBytes().length != 0)
+                throw new SteganographyException("秘钥的字节长度与加密长度不匹配");
             StringBuilder s = new StringBuilder();
             byte[] bytes = new byte[this.DESLength / 8];
             for (int i = 0, m = 1, n = 0; i < this.DESLength; i++, m++) {
@@ -271,7 +269,7 @@ public class LSBSGUtil implements SGUtil {
                 nextSlot();
             }
             Cipher cipher = Cipher.getInstance("DES/ECB/NoPadding");
-            SecretKeySpec sKey = new SecretKeySpec(key.getBytes(), "DES");
+            SecretKeySpec sKey = new SecretKeySpec(this.key.getBytes(), "DES");
             cipher.init(Cipher.DECRYPT_MODE, sKey);
             byte[] origin = cipher.doFinal(bytes);
             StringBuilder length = new StringBuilder();
@@ -280,7 +278,7 @@ public class LSBSGUtil implements SGUtil {
             }
             return Integer.parseInt(length.toString());
         } catch (NoSuchAlgorithmException | NoSuchPaddingException | InvalidKeyException | IllegalBlockSizeException | BadPaddingException e) {
-            throw new SteganographyException("发生未知错误");
+            throw new SteganographyException("解密出错（程序BUG）:" + e.getLocalizedMessage());
         } catch (NumberFormatException e) {
             throw new SteganographyException("文件未隐写入文档");
         }
@@ -298,17 +296,28 @@ public class LSBSGUtil implements SGUtil {
                 newImg.createNewFile();
             }
             ImageIO.write(image, this.imgExt, new FileOutputStream(newImg));
+            System.out.println("隐写的图片被生成到：" + this.imgPath + this.imgName + "." + this.imgExt);
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public static void main(String[] args) throws SteganographyException {
-        LSBSGUtil util = new LSBSGUtil();
-        //util.encodeWithText("src/main/resources/1.jpg", "fiuehfavieh432foinjvkewf");
-        //util.decodeWithText("src/main/resources/SjYqVg52.png");
-        //util.encodeWithImage("src/main/resources/1.jpg", "21.png");
-        util.decodeWithImage("src/main/resources/ZfkDWeTl.png");
+    public void setKey(String key) {
+        try {
+            if (key.getBytes().length != 8) {
+                this.key = key;
+                this.DESLength = 8 * key.getBytes().length;
+            } else {
+                throw new SteganographyException("秘钥的字节长度不为8的倍数");
+            }
+        } catch (SteganographyException e) {
+            e.printStackTrace();
+        }
     }
+
+    public void setDefaultNameLength(int defaultNameLength) {
+        this.defaultNameLength = defaultNameLength;
+    }
+
 
 }
